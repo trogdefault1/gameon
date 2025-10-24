@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """
-Simplified GameOn Fingerprint Generator & CapMonster Cloud Turnstile Solver
-=======================================================================
+GameOn Gatekeeper Token Generator with CapMonster Cloud Integration
+================================================================
 
-This script focuses only on:
+A complete Python solution for bypassing GameOn's Turnstile captcha protection 
+using CapMonster Cloud automated captcha solving service.
+
+This script demonstrates:
 1. Fingerprint generation (matching JavaScript logic)
 2. CapMonster Cloud Turnstile captcha solving
-3. Basic API testing and validation
+3. Complete GameOn gatekeeper token generation
+4. Example product carting workflow
 
-Stops before carting/login functionality.
+Usage:
+    python gameon_complete.py
 """
 
 from __future__ import annotations
@@ -35,6 +40,12 @@ CAPMONSTER_CLOUD_API_KEY = "YOUR_CAPMONSTER_CLOUD_API_KEY_HERE"
 # GameOn Configuration
 GAMEON_WEBSITE_URL = "https://www.gameon.games/"
 GAMEON_WEBSITE_KEY = "0x4AAAAAABww3o50PYtmz9wv"
+GAMEON_GATEKEEPER_URL = "https://gatekeeper.gameon.games/api/gatekeeper-token"
+GAMEON_CART_URL = "https://www.gameon.games/cart/add.js"
+
+# Example Product Configuration
+EXAMPLE_PRODUCT_ID = "55041037336956"  # Example variant ID
+EXAMPLE_QUANTITY = 1
 
 # Processing Configuration
 MAX_WORKERS = 1
@@ -180,22 +191,39 @@ class CapMonsterCloudSolver:
         print(f"{Fore.RED}❌ Task timed out after {max_polls} polls")
         return None
 
-class GameOnSimplified:
-    """Simplified GameOn integration focusing on fingerprint and captcha solving"""
+class GameOnClient:
+    """Complete GameOn integration with fingerprint, captcha solving, and carting"""
     
     def __init__(self):
         self.fp_generator = FingerprintGenerator()
         self.capsolver = CapMonsterCloudSolver(CAPMONSTER_CLOUD_API_KEY)
+        self.session = tls_client.Session(
+            client_identifier="chrome_120",
+            random_tls_extension_order=True
+        )
         
-    def generate_session_data(self) -> Dict[str, str]:
+        # Set realistic headers
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Origin': 'https://www.gameon.games',
+            'Referer': 'https://www.gameon.games/',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin'
+        })
+        
+    def generate_gatekeeper_token(self) -> Optional[Dict]:
         """
-        Generate session data including fingerprint and solved Turnstile token
+        Generate complete gatekeeper token with fingerprint and Turnstile solving
         
         Returns:
-            Dictionary containing fingerprint and turnstile token
+            Dictionary containing gatekeeper token and related data
         """
         print(f"{Fore.CYAN}{'='*60}")
-        print(f"{Fore.CYAN}🎮 GameOn Simplified Session Generator")
+        print(f"{Fore.CYAN}🎮 GameOn Gatekeeper Token Generation")
         print(f"{Fore.CYAN}{'='*60}")
         
         # Step 1: Generate fingerprint
@@ -209,25 +237,106 @@ class GameOnSimplified:
         
         if not turnstile_token:
             print(f"{Fore.RED}❌ Failed to solve Turnstile captcha")
-            return {}
+            return None
         
-        # Step 3: Prepare session data
-        session_data = {
+        # Step 3: Generate gatekeeper token
+        print(f"\n{Fore.BLUE}🎫 Step 3: Generating gatekeeper token...")
+        
+        gatekeeper_payload = {
+            "shopDomain": "store-gameon-games.myshopify.com",
+            "ttlMinutes": 10,
+            "turnstileToken": turnstile_token,
             "fingerprint": fingerprint,
-            "turnstile_token": turnstile_token,
-            "website_url": GAMEON_WEBSITE_URL,
-            "website_key": GAMEON_WEBSITE_KEY,
-            "generated_at": int(time.time() * 1000)
+            "variantId": EXAMPLE_PRODUCT_ID
         }
         
-        print(f"\n{Fore.GREEN}✅ Session data generated successfully!")
-        print(f"{Fore.GREEN}📊 Session Summary:")
-        print(f"   • Fingerprint: {fingerprint}")
-        print(f"   • Turnstile Token: {turnstile_token[:50]}...")
-        print(f"   • Website: {GAMEON_WEBSITE_URL}")
-        print(f"   • Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        try:
+            response = self.session.post(
+                GAMEON_GATEKEEPER_URL,
+                json=gatekeeper_payload,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if data.get("success"):
+                    gatekeeper_token = data.get("gatekeeperToken")
+                    cart_token = data.get("cartToken")
+                    
+                    print(f"{Fore.GREEN}✅ Gatekeeper token generated successfully!")
+                    print(f"{Fore.GREEN}Token: {gatekeeper_token[:50]}...")
+                    print(f"{Fore.GREEN}Cart Token: {cart_token}")
+                    
+                    return {
+                        "success": True,
+                        "gatekeeper_token": gatekeeper_token,
+                        "cart_token": cart_token,
+                        "fingerprint": fingerprint,
+                        "turnstile_token": turnstile_token,
+                        "ttl_minutes": data.get("ttlMinutes"),
+                        "expires_at": data.get("expiresAt"),
+                        "release_id": data.get("releaseId")
+                    }
+                else:
+                    print(f"{Fore.RED}❌ Gatekeeper token generation failed")
+                    print(f"{Fore.RED}Response: {data}")
+                    return None
+            else:
+                print(f"{Fore.RED}❌ HTTP Error: {response.status_code}")
+                print(f"{Fore.RED}Response: {response.text}")
+                return None
+                
+        except Exception as e:
+            print(f"{Fore.RED}❌ Request failed: {e}")
+            return None
+    
+    def add_to_cart(self, gatekeeper_data: Dict) -> bool:
+        """
+        Add example product to cart using gatekeeper token
         
-        return session_data
+        Args:
+            gatekeeper_data: Data from gatekeeper token generation
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        print(f"\n{Fore.BLUE}🛒 Step 4: Adding product to cart...")
+        
+        cart_payload = {
+            "id": EXAMPLE_PRODUCT_ID,
+            "quantity": EXAMPLE_QUANTITY,
+            "properties": {},
+            "gatekeeper_token": gatekeeper_data["gatekeeper_token"]
+        }
+        
+        try:
+            response = self.session.post(
+                GAMEON_CART_URL,
+                json=cart_payload,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if "items" in data:
+                    print(f"{Fore.GREEN}✅ Product added to cart successfully!")
+                    print(f"{Fore.GREEN}Cart items: {len(data['items'])}")
+                    print(f"{Fore.GREEN}Total: {data.get('total_price', 'N/A')}")
+                    return True
+                else:
+                    print(f"{Fore.RED}❌ Cart addition failed")
+                    print(f"{Fore.RED}Response: {data}")
+                    return False
+            else:
+                print(f"{Fore.RED}❌ HTTP Error: {response.status_code}")
+                print(f"{Fore.RED}Response: {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"{Fore.RED}❌ Cart request failed: {e}")
+            return False
     
     def test_api_connection(self) -> bool:
         """Test CapMonster Cloud API connection"""
@@ -244,39 +353,54 @@ class GameOnSimplified:
             return False
 
 def main():
-    """Main function"""
-    print(f"{Fore.MAGENTA}🚀 GameOn Simplified Fingerprint & CapMonster Cloud Solver")
+    """Main function demonstrating complete GameOn workflow"""
+    print(f"{Fore.MAGENTA}🚀 GameOn Complete Workflow with CapMonster Cloud")
     print(f"{Fore.MAGENTA}{'='*60}")
     
     # Check if API key is configured
     if CAPMONSTER_CLOUD_API_KEY == "YOUR_CAPMONSTER_CLOUD_API_KEY_HERE":
-        print(f"{Fore.RED}❌ Please configure your CapMonster Cloud API key in the script!")
+        print(f"{Fore.RED}❌ Please configure your CapMonster Cloud API key!")
         print(f"{Fore.YELLOW}💡 Edit the CAPMONSTER_CLOUD_API_KEY variable at the top of this file.")
         return
     
     # Initialize GameOn client
-    gameon = GameOnSimplified()
+    gameon = GameOnClient()
     
     # Test API connection first
     if not gameon.test_api_connection():
         print(f"{Fore.RED}❌ Cannot proceed without valid API connection")
         return
     
-    print(f"\n{Fore.CYAN}🎯 Generating session data...")
+    print(f"\n{Fore.CYAN}🎯 Starting complete GameOn workflow...")
     
-    # Generate session data
-    session_data = gameon.generate_session_data()
+    # Generate gatekeeper token
+    gatekeeper_data = gameon.generate_gatekeeper_token()
     
-    if session_data:
-        print(f"\n{Fore.GREEN}🎉 Success! Session data ready for use.")
-        print(f"{Fore.YELLOW}💡 This data can be used for further GameOn API calls.")
+    if gatekeeper_data:
+        print(f"\n{Fore.GREEN}🎉 Gatekeeper token generated successfully!")
         
-        # Save session data to file for reference
-        with open("session_data.json", "w") as f:
-            json.dump(session_data, f, indent=2)
-        print(f"{Fore.BLUE}💾 Session data saved to session_data.json")
+        # Add product to cart
+        cart_success = gameon.add_to_cart(gatekeeper_data)
+        
+        if cart_success:
+            print(f"\n{Fore.GREEN}🎉 Complete workflow successful!")
+            print(f"{Fore.YELLOW}💡 This demonstrates the full GameOn integration process.")
+            
+            # Save complete session data
+            session_data = {
+                "gatekeeper_data": gatekeeper_data,
+                "cart_success": cart_success,
+                "workflow_completed": True,
+                "timestamp": int(time.time() * 1000)
+            }
+            
+            with open("complete_session_data.json", "w") as f:
+                json.dump(session_data, f, indent=2)
+            print(f"{Fore.BLUE}💾 Complete session data saved to complete_session_data.json")
+        else:
+            print(f"{Fore.RED}❌ Cart addition failed, but gatekeeper token was generated")
     else:
-        print(f"{Fore.RED}❌ Failed to generate session data")
+        print(f"{Fore.RED}❌ Failed to generate gatekeeper token")
 
 if __name__ == "__main__":
     main()
